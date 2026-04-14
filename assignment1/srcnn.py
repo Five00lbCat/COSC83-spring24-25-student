@@ -5,84 +5,150 @@ import math
 
 #5%
 class ResidualBlock(nn.Module):
-    """Residual block with skip connection"""
-    def __init__(self, channels):
-        super(ResidualBlock, self).__init__()
-        # TODO: Implement the residual block constructor
-        # You need to create:
-        # 1. Two convolutional layers with kernel size 3, padding 1, and the same number of channels
-        # 2. Two batch normalization layers
-        # 3. ReLU activation
-        pass
-        
-    def forward(self, x):
-        # TODO: Implement the forward pass of the residual block
-        # 1. Store the input as the residual
-        # 2. Pass the input through the first conv -> batch norm -> ReLU sequence
-        # 3. Pass the result through the second conv -> batch norm sequence
-        # 4. Add the residual to implement the skip connection
-        # 5. Apply ReLU and return the result
-        pass
+    """
+    Residual block: Conv→BN→ReLU→Conv→BN with an identity skip connection,
+    followed by a final ReLU.
+
+    Pattern follows He et al. (CVPR 2016) post-activation style:
+        out = ReLU(BN(conv2(ReLU(BN(conv1(x))))) + x)
+    """
+    def __init__(self, channels: int):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
+        self.bn1   = nn.BatchNorm2d(channels)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
+        self.bn2   = nn.BatchNorm2d(channels)
+        self.relu  = nn.ReLU(inplace=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        # Skip connection adds before the final activation
+        return self.relu(out + residual)
+
 
 #5%
 class UpscaleBlock(nn.Module):
-    """Upscale block using sub-pixel convolution"""
-    def __init__(self, in_channels, scale_factor):
-        super(UpscaleBlock, self).__init__()
-        # TODO: Implement the upscale block constructor
-        # 1. Calculate output channels for sub-pixel convolution (hint: multiply in_channels by scale_factor^2)
-        # 2. Create a convolutional layer with kernel size 3 and padding 1
-        # 3. Create a pixel shuffle layer with the given scale factor
-        # 4. Create a ReLU activation
-        pass
-        
-    def forward(self, x):
-        # TODO: Implement the forward pass of the upscale block
-        # 1. Apply the convolutional layer
-        # 2. Apply the pixel shuffle operation
-        # 3. Apply ReLU and return the result
-        pass
+    """
+    Sub-pixel convolution (PixelShuffle) upscaling block.
+
+    Strategy (Shi et al., CVPR 2016):
+        1. Expand channels from C → C * scale² with a convolution.
+        2. PixelShuffle rearranges [B, C*s², H, W] → [B, C, H*s, W*s].
+        3. ReLU activation.
+
+    This avoids the checkerboard artefacts that transposed convolutions can produce
+    because every output pixel is generated from distinct input features.
+    """
+    def __init__(self, in_channels: int, scale_factor: int):
+        super().__init__()
+        # The conv must output in_channels * scale_factor² channels so that after
+        # PixelShuffle the spatial dims are expanded while channel count returns to in_channels.
+        out_channels = in_channels * (scale_factor ** 2)
+        self.conv         = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.pixel_shuffle = nn.PixelShuffle(scale_factor)
+        self.relu          = nn.ReLU(inplace=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.relu(self.pixel_shuffle(self.conv(x)))
+
 
 #10%
 class SuperResolutionCNN(nn.Module):
-    def __init__(self, scale_factor=4, num_channels=3, num_features=64, num_blocks=16):
-        """
-        SuperResolution CNN with residual blocks and sub-pixel convolution
-        
-        Args:
-            scale_factor (int): Upscaling factor
-            num_channels (int): Number of input/output channels
-            num_features (int): Number of feature channels
-            num_blocks (int): Number of residual blocks
-        """
-        super(SuperResolutionCNN, self).__init__()
+    """
+    Super-Resolution CNN with:
+      - 9×9 initial feature extraction conv
+      - N residual blocks (default 16)
+      - 3×3 mid conv + BN (anchors the global skip)
+      - Global skip connection across all residual blocks
+      - PixelShuffle upscaling (×2 blocks for powers-of-2 scales; ×3 for scale=3)
+      - 9×9 reconstruction conv
+
+    Supports scale factors: 2, 3, 4 (and 8 by extension of the ×2 chain).
+    """
+    def __init__(self, scale_factor: int = 4, num_channels: int = 3,
+                 num_features: int = 64, num_blocks: int = 16):
+        super().__init__()
         self.scale_factor = scale_factor
-        
-        # TODO: Implement the constructor for the Super Resolution CNN
-        # 1. Create an initial convolution layer with kernel size 9, padding 4, followed by ReLU
-        # 2. Create a sequence of residual blocks (use the ResidualBlock class)
-        # 3. Create a mid convolution layer with kernel size 3, padding 1, followed by batch norm
-        # 4. Create upscaling layers based on the scale factor:
-        #    - For scale factors 2, 4, and 8 (powers of 2), use multiple x2 upscaling blocks
-        #    - For scale factor 3, use a single x3 upscaling block
-        #    - Raise an error for other scale factors
-        # 5. Create a final convolution layer with kernel size 9, padding 4
-        # 6. Initialize the weights using the _initialize_weights method
-        pass
-        
+
+        # ── Initial feature extraction ──────────────────────────────────────
+        # Large 9×9 kernel captures wide receptive field at the start.
+        # padding=4 preserves spatial size.
+        self.initial_conv = nn.Sequential(
+            nn.Conv2d(num_channels, num_features, kernel_size=9, padding=4),
+            nn.ReLU(inplace=True),
+        )
+
+        # ── Residual body ────────────────────────────────────────────────────
+        self.res_blocks = nn.Sequential(
+            *[ResidualBlock(num_features) for _ in range(num_blocks)]
+        )
+
+        # ── Mid conv after residual stack ────────────────────────────────────
+        # No activation here — the global skip is added immediately after,
+        # and we don't want to cut off negative values before that addition.
+        self.mid_conv = nn.Sequential(
+            nn.Conv2d(num_features, num_features, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(num_features),
+        )
+
+        # ── Upscaling chain ──────────────────────────────────────────────────
+        # Powers of 2: chain ×2 blocks (log₂ steps). Scale=3: single ×3 block.
+        # We never combine ×2 and ×3 blocks; unsupported scales raise immediately.
+        if scale_factor in (2, 4, 8):
+            n_steps = int(math.log2(scale_factor))   # 1, 2, or 3 ×2 blocks
+            self.upscale = nn.Sequential(
+                *[UpscaleBlock(num_features, 2) for _ in range(n_steps)]
+            )
+        elif scale_factor == 3:
+            self.upscale = nn.Sequential(UpscaleBlock(num_features, 3))
+        else:
+            raise ValueError(
+                f"Unsupported scale_factor={scale_factor}. "
+                "Use 2, 3, 4, or 8."
+            )
+
+        # ── Final reconstruction ─────────────────────────────────────────────
+        # Another wide 9×9 kernel; no activation — output should be in [0,1]
+        # after clamping, not forced through ReLU which would clip negatives.
+        self.final_conv = nn.Conv2d(num_features, num_channels, kernel_size=9, padding=4)
+
+        self._initialize_weights()
+
     def _initialize_weights(self):
-        # TODO: Implement weight initialization
-        # For each module in the model:
-        # 1. For convolutional layers, use Kaiming normal initialization for weights and zero initialization for biases
-        # 2. For batch normalization layers, use ones for weights and zeros for biases
-        pass
-        
-    def forward(self, x):
-        # TODO: Implement the forward pass of the Super Resolution CNN
-        # 1. Apply the initial convolution and store the output for the global skip connection
-        # 2. Pass the features through the residual blocks
-        # 3. Apply the mid convolution
-        # 4. Add the initial features (global residual learning)
-        # 5. Apply the upscaling layers
-        # 6. Apply the final convolution and return the result
-        pass
+        """
+        Kaiming normal init for conv weights (fan_in mode, compatible with ReLU);
+        standard BN init (weight=1, bias=0).
+        Conv biases are zeroed.
+        """
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Step 1: initial feature extraction → store for global skip
+        initial_features = self.initial_conv(x)         # [B, F, H, W]
+
+        # Step 2: residual blocks
+        features = self.res_blocks(initial_features)    # [B, F, H, W]
+
+        # Step 3: mid conv
+        features = self.mid_conv(features)              # [B, F, H, W]
+
+        # Step 4: global skip — adds initial features back, preventing
+        # the deep residual stack from diverging (same idea as ResNet's stem skip)
+        features = features + initial_features          # [B, F, H, W]
+
+        # Step 5: upscaling
+        features = self.upscale(features)               # [B, F, H*s, W*s]
+
+        # Step 6: final reconstruction conv
+        out = self.final_conv(features)                 # [B, C, H*s, W*s]
+
+        return out

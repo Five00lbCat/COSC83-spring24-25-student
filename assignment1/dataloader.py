@@ -54,33 +54,73 @@ class SuperResolutionDataset(Dataset):
     def __getitem__(self, idx):
         """
         Get a training sample: low-resolution and high-resolution image pair
-        
+
         Args:
             idx (int): Index of the image to load
-            
+
         Returns:
             dict: Dictionary containing:
-                - 'lr': Low-resolution image tensor
-                - 'hr': High-resolution image tensor
-                - 'scale_factor': Scale factor used for downsampling
+                - 'lr': Low-resolution image tensor  [3, patch//scale, patch//scale]
+                - 'hr': High-resolution image tensor [3, patch_size,   patch_size  ]
+                - 'scale_factor': Scale factor used for downsampling (torch.Tensor scalar)
                 - 'method': Downsampling method used
                 - 'filename': Original filename
-                - 'error': Error message (if an error occurred)
+                - 'error': Error message (only present if an error occurred)
         """
-        # TODO: Implement the __getitem__ method that:
-        # 1. Loads a high-resolution image from the dataset
-        # 2. Resizes the HR image to a fixed size
-        # 3. Randomly crops a patch from the HR image
-        # 4. Applies data augmentation if enabled
-        # 5. Randomly selects a scale factor and downsampling method
-        # 6. Creates a low-resolution version of the patch by downsampling
-        # 7. Converts both HR and LR patches to tensors
-        # 8. Handles errors gracefully and returns valid tensors
-        #
-        # Use the helper methods (_random_crop, _augment, _downsample) that are already implemented
-        # Make sure to handle all edge cases and errors
-        
-        pass  # Replace with your implementation
+        try:
+            filename = self.image_files[idx]
+            img_path = os.path.join(self.hr_dir, filename)
+
+            # Load and convert to RGB (handles grayscale / RGBA source images)
+            hr_img = Image.open(img_path).convert('RGB')
+
+            # Resize to a fixed square so all patches come from the same resolution
+            hr_img = hr_img.resize((self.hr_size, self.hr_size), Image.BICUBIC)
+
+            # Random crop to patch_size × patch_size
+            hr_patch = self._random_crop(hr_img)
+
+            # Data augmentation (flips + 90° rotations)
+            if self.augment:
+                hr_patch = self._augment(hr_patch)
+
+            # Pick a random scale factor and downsampling method for this sample.
+            # NOTE: When using SuperResolutionDataset (multiple scale_factors), different
+            # items may produce LR tensors with different spatial sizes, which will cause
+            # PyTorch's default collation to fail. Use FixedScaleDataset (or a custom
+            # collate_fn) for multi-scale training.
+            scale_factor = random.choice(self.scale_factors)
+            method = random.choice(self.downsample_methods)
+
+            # Downsample HR patch → LR patch  (shape: patch_size//scale × patch_size//scale)
+            lr_patch = self._downsample(hr_patch, scale_factor, method)
+
+            # ToTensor normalises uint8 [0, 255] → float32 [0, 1]
+            hr_tensor = self.to_tensor(hr_patch)
+            lr_tensor = self.to_tensor(lr_patch)
+
+            return {
+                'lr': lr_tensor,
+                'hr': hr_tensor,
+                'scale_factor': torch.tensor(scale_factor),
+                'method': method,
+                'filename': filename,
+            }
+
+        except Exception as e:
+            print(f"Error loading index {idx} "
+                  f"({self.image_files[idx] if idx < len(self.image_files) else 'unknown'}): {e}")
+            # Return zero tensors with a consistent shape so the DataLoader does not crash
+            sf = self.scale_factors[0]
+            lr_side = self.patch_size // sf
+            return {
+                'lr': torch.zeros(3, lr_side, lr_side),
+                'hr': torch.zeros(3, self.patch_size, self.patch_size),
+                'scale_factor': torch.tensor(sf),
+                'method': self.downsample_methods[0],
+                'filename': self.image_files[idx] if idx < len(self.image_files) else 'unknown',
+                'error': str(e),
+            }
     
     def _random_crop(self, img):
         """Safely crop a patch from the image"""
