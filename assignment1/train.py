@@ -311,8 +311,8 @@ if __name__ == "__main__":
         'num_blocks':     16,
 
         # Data parameters
-        'train_dir':            'DIV2K_train_HR',
-        'val_dir':              'DIV2K_valid_HR',
+        'train_dir':            '../data/DIV2K/DIV2K_train_HR',
+        'val_dir':              '../data/DIV2K/DIV2K_valid_HR',
         'patch_size':           128,
         'downsample_methods':   ['bicubic', 'bilinear', 'nearest', 'lanczos'],
 
