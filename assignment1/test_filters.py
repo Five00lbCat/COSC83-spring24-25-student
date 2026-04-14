@@ -396,8 +396,8 @@ def test_all(image_path: str, output_dir: str = "filter_results"):
 
 
 if __name__ == "__main__":
-    # Replace with the path to your test image
-    test_image_path = "/Users/f007fxx/Desktop/COSC83-spring24-25/assignment1/example_images/inpaint_4.png"
+    # Path relative to this script's location
+    test_image_path = os.path.join(os.path.dirname(__file__), "example_images", "test.jpg")
     
     # Run all tests
     test_all(test_image_path)
