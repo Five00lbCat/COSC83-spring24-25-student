@@ -239,4 +239,174 @@ for tag, img, label in DENOISE_INPUTS:
     save(fig, f'{tag}_denoise')
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. Salt-and-pepper noise series
+# ─────────────────────────────────────────────────────────────────────────────
+
+saltpepper_gray = add_noise(_test_gray, noise_type='salt_pepper', var=0.05)
+
+SP_INPUTS = [
+    ('saltpepper', saltpepper_gray, 'Salt-and-pepper test.jpg (density=0.05)'),
+]
+
+# Run all four filter types on the salt-and-pepper image
+for tag, img, label in SP_INPUTS:
+    # Gaussian
+    fig, axes = plt.subplots(1, len(GAUSS_SIZES) + 1, figsize=(3*(len(GAUSS_SIZES)+1), 3.5))
+    fig.suptitle(f'Gaussian filter — {label}', fontsize=10)
+    show_gray(axes[0], img, 'Original')
+    for ci, ks in enumerate(GAUSS_SIZES):
+        out = gaussian_filter(img.astype(np.float64), kernel_size=ks, sigma=1.0)
+        show_gray(axes[ci+1], normalize_image(out), f'k={ks}, σ=1.0')
+    plt.tight_layout()
+    save(fig, f'{tag}_gaussian')
+
+    # Mean
+    fig, axes = plt.subplots(1, len(MEAN_SIZES) + 1, figsize=(3*(len(MEAN_SIZES)+1), 3.5))
+    fig.suptitle(f'Mean filter — {label}', fontsize=10)
+    show_gray(axes[0], img, 'Original')
+    for ci, ks in enumerate(MEAN_SIZES):
+        out = mean_filter(img.astype(np.float64), kernel_size=ks)
+        show_gray(axes[ci+1], normalize_image(out), f'k={ks}')
+    plt.tight_layout()
+    save(fig, f'{tag}_mean')
+
+    # Sobel
+    img_f = img.astype(np.float64)
+    gx, gy = sobel_filter(img_f, 'x'), sobel_filter(img_f, 'y')
+    mag, dirn = sobel_filter(img_f, 'both')
+    panels = [
+        (img,                  'Original',           'gray'),
+        (normalize_image(gx),  'Sobel X',            'gray'),
+        (normalize_image(gy),  'Sobel Y',            'gray'),
+        (normalize_image(mag), 'Magnitude',          'gray'),
+        (dirn,                 'Direction',          'hsv'),
+    ]
+    fig, axes = plt.subplots(1, len(panels), figsize=(3*len(panels), 3.5))
+    fig.suptitle(f'Sobel filter — {label}', fontsize=10)
+    for ax, (data, title, cmap) in zip(axes, panels):
+        show_gray(ax, data, title, cmap=cmap)
+    plt.tight_layout()
+    save(fig, f'{tag}_sobel')
+
+    # Laplacian
+    lap_std  = laplacian_filter(img.astype(np.float64), kernel_type='standard')
+    lap_diag = laplacian_filter(img.astype(np.float64), kernel_type='diagonal')
+    fig, axes = plt.subplots(1, 3, figsize=(10, 3.5))
+    fig.suptitle(f'Laplacian filter — {label}', fontsize=10)
+    show_gray(axes[0], img,                      'Original')
+    show_gray(axes[1], normalize_image(lap_std), 'Standard (4-connected)')
+    show_gray(axes[2], normalize_image(lap_diag),'Diagonal (8-connected)')
+    plt.tight_layout()
+    save(fig, f'{tag}_laplacian')
+
+    # Denoising comparison (salt-and-pepper is best removed by median, but
+    # we show mean and gaussian as implemented here)
+    img_f = img.astype(np.float64)
+    panels = [
+        (img, 'S&P input'),
+        (normalize_image(mean_filter(img_f, kernel_size=3)),       'Mean k=3'),
+        (normalize_image(mean_filter(img_f, kernel_size=7)),       'Mean k=7'),
+        (normalize_image(gaussian_filter(img_f, 7, sigma=1.0)),    'Gauss k=7 σ=1'),
+        (normalize_image(gaussian_filter(img_f, 7, sigma=2.0)),    'Gauss k=7 σ=2'),
+        (normalize_image(gaussian_filter(img_f, 15, sigma=2.0)),   'Gauss k=15 σ=2'),
+    ]
+    fig, axes = plt.subplots(1, len(panels), figsize=(3*len(panels), 3.5))
+    fig.suptitle(f'Noise reduction — {label}', fontsize=10)
+    for ax, (data, title) in zip(axes, panels):
+        show_gray(ax, data, title)
+    plt.tight_layout()
+    save(fig, f'{tag}_denoise')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Padding mode comparison (mean + gaussian, same crop, zero/reflect/replicate)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Use a 64×64 corner crop of the checkerboard so border effects are prominent
+pad_img = checkerboard[:64, :64].astype(np.float64)
+
+PADDING_MODES = ['constant', 'reflect', 'replicate']
+PAD_LABELS    = ['Zero (constant)', 'Reflect', 'Replicate (edge)']
+
+fig, axes = plt.subplots(2, len(PADDING_MODES) + 1, figsize=(3*(len(PADDING_MODES)+1), 7))
+fig.suptitle('Padding mode comparison — 64×64 checkerboard corner crop, k=7', fontsize=10, y=1.01)
+
+for row, (filter_fn, filter_label, kwargs) in enumerate([
+    (mean_filter,     'Mean filter k=7',           {'kernel_size': 7}),
+    (gaussian_filter, 'Gaussian filter k=7, σ=2',  {'kernel_size': 7, 'sigma': 2.0}),
+]):
+    show_gray(axes[row, 0], pad_img.astype(np.uint8),
+              'Original' if row == 0 else '')
+    for ci, (mode, label) in enumerate(zip(PADDING_MODES, PAD_LABELS)):
+        out = filter_fn(pad_img, padding_mode=mode, **kwargs)
+        show_gray(axes[row, ci+1], normalize_image(out),
+                  f'{filter_label}\n{label}' if row == 0 else label)
+
+plt.tight_layout()
+save(fig, 'padding_comparison')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. Portrait/personal photo — all filters on photo_01.jpg
+# ─────────────────────────────────────────────────────────────────────────────
+
+portrait_color = load_natural(_HERE / 'example_images' / 'photo_01.jpg', max_size=512)
+portrait_gray  = to_gray(portrait_color)
+
+PORTRAIT_TAG   = 'portrait'
+PORTRAIT_LABEL = 'Personal photo (photo_01)'
+
+# Gaussian
+fig, axes = plt.subplots(len(SIGMAS), len(GAUSS_SIZES) + 1,
+                         figsize=(3*(len(GAUSS_SIZES)+1), 3*len(SIGMAS)))
+fig.suptitle(f'Gaussian filter — {PORTRAIT_LABEL}', fontsize=10, y=1.01)
+for ri, sigma in enumerate(SIGMAS):
+    show_gray(axes[ri, 0], portrait_gray, 'Original' if ri == 0 else '')
+    for ci, ks in enumerate(GAUSS_SIZES):
+        out = gaussian_filter(portrait_gray.astype(np.float64), kernel_size=ks, sigma=sigma)
+        show_gray(axes[ri, ci+1], normalize_image(out), f'k={ks}, σ={sigma}')
+plt.tight_layout()
+save(fig, f'{PORTRAIT_TAG}_gaussian')
+
+# Mean
+fig, axes = plt.subplots(1, len(MEAN_SIZES) + 1, figsize=(3*(len(MEAN_SIZES)+1), 3.5))
+fig.suptitle(f'Mean filter — {PORTRAIT_LABEL}', fontsize=10)
+show_gray(axes[0], portrait_gray, 'Original')
+for ci, ks in enumerate(MEAN_SIZES):
+    out = mean_filter(portrait_gray.astype(np.float64), kernel_size=ks)
+    show_gray(axes[ci+1], normalize_image(out), f'k={ks}')
+plt.tight_layout()
+save(fig, f'{PORTRAIT_TAG}_mean')
+
+# Sobel
+img_f = portrait_gray.astype(np.float64)
+gx, gy = sobel_filter(img_f, 'x'), sobel_filter(img_f, 'y')
+mag, dirn = sobel_filter(img_f, 'both')
+panels = [
+    (portrait_gray,        'Original',  'gray'),
+    (normalize_image(gx),  'Sobel X',   'gray'),
+    (normalize_image(gy),  'Sobel Y',   'gray'),
+    (normalize_image(mag), 'Magnitude', 'gray'),
+    (dirn,                 'Direction', 'hsv'),
+]
+fig, axes = plt.subplots(1, len(panels), figsize=(3*len(panels), 3.5))
+fig.suptitle(f'Sobel filter — {PORTRAIT_LABEL}', fontsize=10)
+for ax, (data, title, cmap) in zip(axes, panels):
+    show_gray(ax, data, title, cmap=cmap)
+plt.tight_layout()
+save(fig, f'{PORTRAIT_TAG}_sobel')
+
+# Laplacian
+lap_std  = laplacian_filter(portrait_gray.astype(np.float64), kernel_type='standard')
+lap_diag = laplacian_filter(portrait_gray.astype(np.float64), kernel_type='diagonal')
+fig, axes = plt.subplots(1, 3, figsize=(10, 3.5))
+fig.suptitle(f'Laplacian filter — {PORTRAIT_LABEL}', fontsize=10)
+show_gray(axes[0], portrait_gray,               'Original')
+show_gray(axes[1], normalize_image(lap_std),    'Standard (4-connected)')
+show_gray(axes[2], normalize_image(lap_diag),   'Diagonal (8-connected)')
+plt.tight_layout()
+save(fig, f'{PORTRAIT_TAG}_laplacian')
+
+
 print(f'\nAll figures written to {OUT_DIR}')

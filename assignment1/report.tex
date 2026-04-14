@@ -117,6 +117,26 @@ Three padding strategies are supported:
         appropriate when the image content is expected to continue smoothly.
 \end{itemize}
 
+Figure~\ref{fig:padding} compares all three modes on a 64$\times$64
+corner crop of the checkerboard, where border effects are most visible.
+Zero padding introduces a dark halo at the image boundary; reflect and
+replicate both avoid it, but replicate produces a sharper edge artefact
+exactly at the border while reflect is smoother.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{padding_comparison}
+  \caption{Padding mode comparison on a 64$\times$64 checkerboard corner crop.
+           Top row: mean filter ($k=7$).
+           Bottom row: Gaussian filter ($k=7$, $\sigma=2$).
+           Left column: original crop.
+           Subsequent columns: zero (constant), reflect, replicate padding.
+           Zero padding produces a dark border artefact; reflect and replicate
+           avoid it. Reflect is smoother; replicate has a sharper edge exactly
+           at the image boundary.}
+  \label{fig:padding}
+\end{figure}
+
 \subsection{Mean Filter}
 
 The box (mean) filter replaces each pixel with the unweighted average of its
@@ -324,7 +344,7 @@ input images.
   \end{subfigure}
   \begin{subfigure}[b]{\linewidth}
     \includegraphics[width=\linewidth]{noisy_sobel}
-    \caption{Noisy test image.}
+    \caption{Gaussian-noisy test image.}
   \end{subfigure}
   \begin{subfigure}[b]{\linewidth}
     \includegraphics[width=\linewidth]{natural_sobel}
@@ -336,6 +356,84 @@ input images.
            The checkerboard shows clean axis-aligned gradients; the natural
            image shows strong responses at object boundaries.}
   \label{fig:sobel}
+\end{figure}
+
+\subsection{Salt-and-Pepper Noise}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{\linewidth}
+    \includegraphics[width=\linewidth]{saltpepper_denoise}
+    \caption{Mean and Gaussian filtering of salt-and-pepper noise (density 0.05).}
+  \end{subfigure}
+  \begin{subfigure}[b]{\linewidth}
+    \includegraphics[width=\linewidth]{saltpepper_laplacian}
+    \caption{Laplacian response on salt-and-pepper input.}
+  \end{subfigure}
+  \begin{subfigure}[b]{\linewidth}
+    \includegraphics[width=\linewidth]{saltpepper_sobel}
+    \caption{Sobel response on salt-and-pepper input.}
+  \end{subfigure}
+  \caption{Salt-and-pepper noise (density $= 0.05$) and filter responses.
+           Mean and Gaussian filters reduce the impulse noise, but neither
+           eliminates it as effectively as a median filter would.
+           The Laplacian and Sobel responses are dominated by the noise spikes
+           rather than image structure, demonstrating that first- and
+           second-derivative filters require pre-smoothing before edge
+           detection on impulsively noisy images.}
+  \label{fig:saltpepper}
+\end{figure}
+
+\subsection{Personal Photo (Portrait)}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{\linewidth}
+    \includegraphics[width=\linewidth]{portrait_mean}
+    \caption{Mean filter at $k \in \{3, 7, 15\}$.}
+  \end{subfigure}
+  \begin{subfigure}[b]{\linewidth}
+    \includegraphics[width=\linewidth]{portrait_gaussian}
+    \caption{Gaussian filter, $\sigma \in \{0.5,1.0,2.0\}$ (rows) $\times$ $k \in \{3,7,15\}$ (columns).}
+  \end{subfigure}
+  \begin{subfigure}[b]{\linewidth}
+    \includegraphics[width=\linewidth]{portrait_sobel}
+    \caption{Sobel gradient components and magnitude.}
+  \end{subfigure}
+  \begin{subfigure}[b]{\linewidth}
+    \includegraphics[width=\linewidth]{portrait_laplacian}
+    \caption{Laplacian standard and diagonal kernels.}
+  \end{subfigure}
+  \caption{All Part~1 filters applied to a personally captured photograph
+           (\texttt{photo\_01.jpg}, resized to 512\,px long edge).
+           The Sobel magnitude clearly outlines object boundaries and facial
+           features in the image.
+           Gaussian smoothing with $\sigma=2, k=15$ produces a painterly effect
+           while preserving large-scale structure.}
+  \label{fig:portrait}
+\end{figure}
+
+\subsection{OpenCV Comparison}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{../filter_results/test_opencv_comparison_smoothing}
+  \caption{Smoothing filter comparison: OpenCV \texttt{cv2.blur} and
+           \texttt{cv2.GaussianBlur} vs.\ our implementations at $k=5$.
+           The outputs are visually indistinguishable; pixel-level differences
+           are negligible (typically $< 1$ count on the uint8 scale), arising
+           solely from floating-point accumulation order differences.}
+  \label{fig:opencv_smooth}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{../filter_results/test_opencv_comparison_edges}
+  \caption{Edge detection comparison: OpenCV \texttt{cv2.Laplacian} and
+           \texttt{cv2.Sobel} vs.\ our implementations.
+           Both pairs match closely, confirming that our correlation convention
+           and kernel construction are consistent with OpenCV's defaults.}
+  \label{fig:opencv_edges}
 \end{figure}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -488,6 +586,20 @@ The model underperforms bicubic by 4.15\,dB on DIV2K.
 This is discussed in Section~\ref{sec:discussion}.
 
 \subsection{Training Curves}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{training_curves}
+  \caption{Training history over 50 epochs.
+           Left: L1 training loss and validation loss.
+           Centre: validation PSNR (dB).
+           Right: validation SSIM.
+           The learning rate decay at epoch~30 produces a visible kink in all
+           three curves.
+           (\texttt{training\_curves.png} copied from the Colab Drive checkpoint
+           directory.)}
+  \label{fig:training}
+\end{figure}
 
 Training loss decreases monotonically.
 PSNR on the validation set improves through epoch~30 (learning rate decay

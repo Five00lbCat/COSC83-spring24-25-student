@@ -69,7 +69,7 @@ def test_model(config):
     
     print(f"Loaded model from {config['model_path']}")
     print(f"Model was trained for {checkpoint['epoch']} epochs")
-    print(f"Best PSNR: {checkpoint.get('psnr', 'N/A'):.2f}, SSIM: {checkpoint.get('ssim', 'N/A'):.4f}")
+    print(f"Best PSNR: {checkpoint.get('psnr', float('nan')):.2f}, SSIM: {checkpoint.get('ssim', float('nan')):.4f}")
     
     # Get all test images
     test_images = []
