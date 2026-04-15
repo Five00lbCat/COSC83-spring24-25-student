@@ -1,1 +1,8 @@
 venv/
+__pycache__/
+*.pyc
+data/
+*.zip
+assignment1/overleaf_upload/
+assignment1/checkpoints/dummy.pth
+assignment1/test_output/
