@@ -287,31 +287,44 @@ input images.
   \label{fig:mean}
 \end{figure}
 
+\FloatBarrier
 \subsection{Gaussian Filter}
 
-\begin{figure}[p]
+\begin{figure}[h!]
   \centering
-  \begin{subfigure}[b]{0.95\linewidth}
-    \vspace{-0.5em}
+  \begin{subfigure}[b]{0.85\linewidth}
     \includegraphics[width=\linewidth]{checkerboard_gaussian}
     \caption{Checkerboard: sigma varies across rows, kernel size across columns.}
-  \end{subfigure}\\[0.3em]
-  \begin{subfigure}[b]{0.95\linewidth}
-    \includegraphics[width=\linewidth]{noisy_gaussian}
-    \caption{Noisy test image.}
-  \end{subfigure}\\[0.3em]
-  \begin{subfigure}[b]{0.95\linewidth}
-    \includegraphics[width=\linewidth]{natural_gaussian}
-    \caption{Natural image.}
   \end{subfigure}
-  \caption{Gaussian filter for $\sigma \in \{0.5, 1.0, 2.0\}$ (rows) and
-           $k \in \{3, 7, 15\}$ (columns).
-           For a fixed $\sigma$, increasing $k$ beyond $6\sigma$ has negligible
-           effect because the kernel tails are already vanishingly small.
-           For a fixed $k$, increasing $\sigma$ progressively blurs the image.}
+  \caption{Gaussian filter (checkerboard) for $\sigma \in \{0.5, 1.0, 2.0\}$ (rows) and
+           $k \in \{3, 7, 15\}$ (columns).}
   \label{fig:gaussian}
 \end{figure}
 
+\begin{figure}[h!]
+  \centering
+  \begin{subfigure}[b]{0.85\linewidth}
+    \includegraphics[width=\linewidth]{noisy_gaussian}
+    \caption{Noisy test image.}
+  \end{subfigure}
+  \caption{Gaussian filter (noisy image) for $\sigma \in \{0.5, 1.0, 2.0\}$ (rows) and
+           $k \in \{3, 7, 15\}$ (columns).
+           For a fixed $\sigma$, increasing $k$ beyond $6\sigma$ has negligible
+           effect because the kernel tails are already vanishingly small.}
+\end{figure}
+
+\begin{figure}[h!]
+  \centering
+  \begin{subfigure}[b]{0.85\linewidth}
+    \includegraphics[width=\linewidth]{natural_gaussian}
+    \caption{Natural image.}
+  \end{subfigure}
+  \caption{Gaussian filter (natural image) for $\sigma \in \{0.5, 1.0, 2.0\}$ (rows) and
+           $k \in \{3, 7, 15\}$ (columns).
+           For a fixed $k$, increasing $\sigma$ progressively blurs the image.}
+\end{figure}
+
+\FloatBarrier
 \subsection{Laplacian Filter}
 
 \begin{figure}[H]
@@ -387,15 +400,16 @@ input images.
   \label{fig:saltpepper}
 \end{figure}
 
+\FloatBarrier
 \subsection{Personal Photo (Portrait)}
 
-\begin{figure}[p]
+\begin{figure}[h!]
   \centering
-  \begin{subfigure}[b]{0.95\linewidth}
+  \begin{subfigure}[b]{0.85\linewidth}
     \includegraphics[width=\linewidth]{portrait_mean}
     \caption{Mean filter at $k \in \{3, 7, 15\}$.}
   \end{subfigure}\\[0.3em]
-  \begin{subfigure}[b]{0.95\linewidth}
+  \begin{subfigure}[b]{0.85\linewidth}
     \includegraphics[width=\linewidth]{portrait_gaussian}
     \caption{Gaussian filter, $\sigma \in \{0.5,1.0,2.0\}$ (rows) $\times$ $k \in \{3,7,15\}$ (columns).}
   \end{subfigure}
@@ -404,14 +418,14 @@ input images.
   \label{fig:portrait}
 \end{figure}
 
-\begin{figure}[p]
+\begin{figure}[h!]
   \ContinuedFloat
   \centering
-  \begin{subfigure}[b]{0.95\linewidth}
+  \begin{subfigure}[b]{0.85\linewidth}
     \includegraphics[width=\linewidth]{portrait_sobel}
     \caption{Sobel gradient components and magnitude.}
   \end{subfigure}\\[0.3em]
-  \begin{subfigure}[b]{0.95\linewidth}
+  \begin{subfigure}[b]{0.85\linewidth}
     \includegraphics[width=\linewidth]{portrait_laplacian}
     \caption{Laplacian standard and diagonal kernels.}
   \end{subfigure}
@@ -422,6 +436,7 @@ input images.
            while preserving large-scale structure.}
 \end{figure}
 
+\FloatBarrier
 \subsection{OpenCV Comparison}
 
 \begin{figure}[H]
