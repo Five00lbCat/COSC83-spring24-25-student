@@ -1,0 +1,17 @@
+# Model checkpoints
+*.pth
+
+# Experiment tracking
+part2/wandb/
+
+# Dataset images (large, not part of submission)
+part2/images/
+
+# Test/scratch output images
+part1/harris_test.jpg
+part1/matching_test.jpg
+part1/descriptors_test.jpg
+
+# macOS metadata
+.DS_Store
+part1/.DS_Store

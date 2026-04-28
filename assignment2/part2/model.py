@@ -3,59 +3,81 @@ Model architecture for Siamese Neural Network
 """
 import torch
 import torch.nn as nn
-import torchvision
+import torchvision.models as models
+
 
 class Flatten(nn.Module):
     """Flatten layer to convert 4D tensor to 2D tensor."""
     def forward(self, input):
         return input.view(input.size(0), -1)
 
+
 class SiameseNetwork(nn.Module):
     """
-    Siamese Neural Network implementation
-    
+    Siamese Neural Network using ResNet18 as backbone.
+
     Args:
-        contra_loss (bool): Whether to use contrastive loss (True) or BCE loss (False)
+        contra_loss (bool): If True return raw embeddings (for contrastive/triplet loss).
+                            If False apply FC head and return sigmoid similarity score.
     """
     def __init__(self, contra_loss=False):
         super(SiameseNetwork, self).__init__()
         self.contra_loss = contra_loss
-        
-        # TODO: Initialize the ResNet18 backbone
-        # Hint: Use torchvision.models.resnet18 and modify it appropriately
-        # 1. Initialize the ResNet18 model
-        # 2. Modify the first convolutional layer if needed
-        # 3. Store the number of features from the final layer
-        # 4. Remove the final classification layer
-        
-        # TODO: Create additional layers for BCE loss
-        # Hint: You need fully connected layers to process the concatenated features
-        # and a sigmoid activation for the final output
-        
-        # TODO: Initialize the weights of your network
-        # Hint: Create a method to initialize weights and apply it to your layers
-    
+
+        # ── Backbone ──────────────────────────────────────────────────
+        backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+
+        # Modify first conv to accept RGB (3 channels) — already the default for
+        # ResNet18, but we make it explicit and configurable.
+        backbone.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+        # Store feature dimension (512 for ResNet18)
+        self.feat_dim = backbone.fc.in_features  # 512
+
+        # Remove final classification head: keep everything up to (and including)
+        # the adaptive average pool, then flatten manually.
+        self.backbone = nn.Sequential(
+            *list(backbone.children())[:-1],   # drops the final Linear layer
+            Flatten()
+        )
+
+        # ── Similarity head (BCE mode only) ───────────────────────────
+        if not self.contra_loss:
+            self.fc = nn.Sequential(
+                nn.Linear(self.feat_dim * 2, 256),
+                nn.ReLU(inplace=True),
+                nn.Linear(256, 1),
+                nn.Sigmoid()
+            )
+            self.fc.apply(self.init_weights)
+
+    # ------------------------------------------------------------------
     def init_weights(self, m):
-        # TODO: Implement weight initialization for linear layers
-        # Hint: Use Xavier initialization for weights and small constant for biases
-        pass
-    
+        """Xavier init for Linear layers; small positive bias."""
+        if isinstance(m, nn.Linear):
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.constant_(m.bias, 0.01)
+
+    # ------------------------------------------------------------------
     def forward_once(self, x):
-        """
-        Forward pass for one input image
-        """
-        # TODO: Implement the forward pass for a single image
-        # The function should return the feature vector for the input image
-        # Hint: Pass the input through the backbone network and flatten the output
-        pass
-    
+        """Extract feature vector for a single image."""
+        return self.backbone(x)          # shape: (B, 512)
+
+    # ------------------------------------------------------------------
     def forward(self, input1, input2):
         """
-        Forward pass for the Siamese network
+        Forward pass.
+
+        BCE mode  → returns scalar similarity score per pair  (B, 1)
+        Contrastive mode → returns (emb1, emb2) each of shape (B, 512)
         """
-        # TODO: Implement the complete forward pass
-        # 1. Get embeddings for both input images using forward_once
-        # 2. Handle both cases: contrastive loss and BCE loss
-        #    - For contrastive loss: return both embeddings
-        #    - For BCE loss: concatenate embeddings, pass through FC layers, apply sigmoid
-        pass
+        emb1 = self.forward_once(input1)
+        emb2 = self.forward_once(input2)
+
+        if self.contra_loss:
+            # Return raw embeddings so the contrastive / triplet loss can use distances
+            return emb1, emb2
+        else:
+            # Concatenate and predict similarity
+            combined = torch.cat([emb1, emb2], dim=1)   # (B, 1024)
+            return self.fc(combined)                     # (B, 1)
